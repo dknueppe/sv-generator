@@ -1,3 +1,5 @@
+#define _DEFAULT_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -17,10 +19,10 @@
 #define SRC_MAC_LEN 6
 #define SV_FRAME_LEN 126
 
-static uint8_t send_ring_buffer[4096] = {};
-static size_t ring_read = 0;
-static size_t ring_write = 0;
-static bool wrap_buffer = false;
+//static uint8_t send_ring_buffer[4096] = {};
+//static size_t ring_read = 0;
+//static size_t ring_write = 0;
+//static bool wrap_buffer = false;
 
 #pragma pack(1)
 
@@ -133,7 +135,6 @@ int main() {
         .asdu1.len              = 0x40
     };
 
-
     // Open raw socket
     if ((sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
         perror("socket");
@@ -160,15 +161,19 @@ int main() {
     socket_address.sll_halen = ETH_ALEN;
     memcpy(socket_address.sll_addr, DEST_MAC, 6);
 
+    struct timespec next_time = {};
+    clock_gettime(CLOCK_MONOTONIC, &next_time);
     // Send loop
     while (1) {
-        //build_sv_frame(frame, (uint8_t *)if_mac.ifr_hwaddr.sa_data, smpCnt++);
         if (sendto(sockfd, &sv_frame, sizeof(sv_frame), 0,
                    (struct sockaddr*)&socket_address, sizeof(socket_address)) < 0) {
             perror("sendto");
             break;
         }
-        usleep(250);  // 4000 Hz = 250 µs interval (adjust as needed)
+        next_time.tv_nsec += 250000l;
+        next_time.tv_sec += next_time.tv_nsec / 1000000000l;
+        next_time.tv_nsec %= 1000000000l;
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_time, nullptr);
     }
 
     close(sockfd);
