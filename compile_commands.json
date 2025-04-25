@@ -1,0 +1,8 @@
+[
+  {
+    "directory": "/root/sv-generator",
+    "command": "gcc -Wall -Wextra -Wpedantic -std=c23 -lrt -lc sv_publisher.c",
+    "file": "sv_publisher.c"
+  }
+]
+

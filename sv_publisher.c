@@ -19,10 +19,58 @@
 #define SRC_MAC_LEN 6
 #define SV_FRAME_LEN 126
 
+/*
+ * MU1 L1 6.4193kA < 126.21°
+ * MU1 L2 6.2647kA < 3.63°
+ * MU1 L3 6.0929kA < -113.68°
+ *
+ * MU2 L1 4.4588kA < -48.30°
+ * MU2 L2 4.3459kA < -170.89°
+ * MU2 L3 4.2301kA < 71.75°
+ *
+ * MU3 L1 4.4588kA < -48.30°
+ * MU3 L2 4.3459kA < -170.89°
+ * MU3 L3 4.2301kA < 71.75°
+ *
+ * MU4 L1 7.0171kA < -43.27°
+ * MU4 L2 6.8316kA < -165.86°
+ * MU4 L3 6.0929kA < 76.71°
+ */
+#define MU1_L1_AMP 6.4193f//kA < 126.21°
+#define MU1_L2_AMP 6.2647f//kA < 3.63°
+#define MU1_L3_AMP 6.0929f//kA < -113.68°
+#define MU1_L1_ANGL 126.21f
+#define MU1_L2_ANGL 3.63f
+#define MU1_L3_ANGL -113.68f
+
+#define MU2_L1_AMP 4.4588f//kA < -48.30°
+#define MU2_L2_AMP 4.3459f//kA < -170.89°
+#define MU2_L3_AMP 4.2301f//kA < 71.75°
+#define MU2_L1_ANGL -48.30f
+#define MU2_L2_ANGL -170.89f
+#define MU2_L3_ANGL 71.75f
+
+#define MU3_L1_AMP 4.4588f//kA < -48.30°
+#define MU3_L2_AMP 4.3459f//kA < -170.89°
+#define MU3_L3_AMP 4.2301f//kA < 71.75°
+#define MU3_L1_ANGL -48.30f
+#define MU3_L2_ANGL -170.89f
+#define MU3_L3_ANGL 71.75f
+
+#define MU4_L1_AMP 7.0171f//kA < -43.27°
+#define MU4_L2_AMP 6.8316f//kA < -165.86°
+#define MU4_L3_AMP 6.0929f//kA < 76.71°
+#define MU4_L1_ANGL -43.27f
+#define MU4_L2_ANGL -165.86f
+#define MU4_L3_ANGL 76.71f
+
 //static uint8_t send_ring_buffer[4096] = {};
 //static size_t ring_read = 0;
 //static size_t ring_write = 0;
 //static bool wrap_buffer = false;
+//
+
+float mu_sines[4][4][80];
 
 #pragma pack(1)
 
@@ -103,7 +151,7 @@ int main() {
     struct ifreq if_mac = {};
     struct sockaddr_ll socket_address = {};
     struct sv_frame sv_frame = {
-        .eth.dest_mac           = { 0x01, 0x0c, 0xcd, 0x04, 0x00, 0x01 },
+        .eth.dest_mac           = { 0x01, 0x0c, 0xcd, 0x04, 0x00, 0x04 },
         .eth.src_mac            = { 0x20, 0xb7, 0xc0, 0x00, 0x57, 0xc7 },
         .eth.ethertype          = htons(0x88ba),
         .sv.APPID               = htons(0x4000),
@@ -162,18 +210,19 @@ int main() {
     memcpy(socket_address.sll_addr, DEST_MAC, 6);
 
     struct timespec next_time = {};
-    clock_gettime(CLOCK_MONOTONIC, &next_time);
+    (void)clock_gettime(CLOCK_MONOTONIC, &next_time);
     // Send loop
     while (1) {
-        if (sendto(sockfd, &sv_frame, sizeof(sv_frame), 0,
-                   (struct sockaddr*)&socket_address, sizeof(socket_address)) < 0) {
+        //if (sendto(sockfd, &sv_frame, sizeof(sv_frame), 0,
+        //           (struct sockaddr*)&socket_address, sizeof(socket_address)) < 0) {
+        if (send(sockfd, &sv_frame, sizeof(sv_frame), 0) < 0) {
             perror("sendto");
             break;
         }
         next_time.tv_nsec += 250000l;
         next_time.tv_sec += next_time.tv_nsec / 1000000000l;
         next_time.tv_nsec %= 1000000000l;
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_time, nullptr);
+        (void)clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_time, nullptr);
     }
 
     close(sockfd);
