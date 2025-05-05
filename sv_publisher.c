@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <math.h>
 
 #define IF_NAME "enp8s0"  // Change to your interface name
 #define ETH_P_SV 0x88BA  // EtherType for Sampled Values
@@ -36,30 +37,30 @@
  * MU4 L2 6.8316kA < -165.86°
  * MU4 L3 6.0929kA < 76.71°
  */
-#define MU1_L1_AMP 6.4193f//kA < 126.21°
-#define MU1_L2_AMP 6.2647f//kA < 3.63°
-#define MU1_L3_AMP 6.0929f//kA < -113.68°
+#define MU1_L1_AMP 6419.3f//A < 126.21°
+#define MU1_L2_AMP 6264.7f//A < 3.63°
+#define MU1_L3_AMP 6092.9f//A < -113.68°
 #define MU1_L1_ANGL 126.21f
 #define MU1_L2_ANGL 3.63f
 #define MU1_L3_ANGL -113.68f
 
-#define MU2_L1_AMP 4.4588f//kA < -48.30°
-#define MU2_L2_AMP 4.3459f//kA < -170.89°
-#define MU2_L3_AMP 4.2301f//kA < 71.75°
+#define MU2_L1_AMP 4458.8f//A < -48.30°
+#define MU2_L2_AMP 4345.9f//A < -170.89°
+#define MU2_L3_AMP 4230.1f//A < 71.75°
 #define MU2_L1_ANGL -48.30f
 #define MU2_L2_ANGL -170.89f
 #define MU2_L3_ANGL 71.75f
 
-#define MU3_L1_AMP 4.4588f//kA < -48.30°
-#define MU3_L2_AMP 4.3459f//kA < -170.89°
-#define MU3_L3_AMP 4.2301f//kA < 71.75°
+#define MU3_L1_AMP 4458.8f//A < -48.30°
+#define MU3_L2_AMP 4345.9f//A < -170.89°
+#define MU3_L3_AMP 4230.1f//A < 71.75°
 #define MU3_L1_ANGL -48.30f
 #define MU3_L2_ANGL -170.89f
 #define MU3_L3_ANGL 71.75f
 
-#define MU4_L1_AMP 7.0171f//kA < -43.27°
-#define MU4_L2_AMP 6.8316f//kA < -165.86°
-#define MU4_L3_AMP 6.0929f//kA < 76.71°
+#define MU4_L1_AMP 7017.1f//A < -43.27°
+#define MU4_L2_AMP 6831.6f//A < -165.86°
+#define MU4_L3_AMP 6092.9f//A < 76.71°
 #define MU4_L1_ANGL -43.27f
 #define MU4_L2_ANGL -165.86f
 #define MU4_L3_ANGL 76.71f
@@ -68,9 +69,7 @@
 //static size_t ring_read = 0;
 //static size_t ring_write = 0;
 //static bool wrap_buffer = false;
-//
 
-float mu_sines[4][4][80];
 
 #pragma pack(1)
 
@@ -183,6 +182,27 @@ int main() {
         .asdu1.len              = 0x40
     };
 
+    constexpr float amp_angl_lut[4][3][2] = {
+         {{MU1_L1_AMP, MU1_L1_ANGL}, {MU1_L2_AMP, MU1_L2_ANGL}, {MU1_L3_AMP, MU1_L3_ANGL}},
+         {{MU2_L1_AMP, MU2_L1_ANGL}, {MU2_L2_AMP, MU2_L2_ANGL}, {MU2_L3_AMP, MU2_L3_ANGL}},
+         {{MU3_L1_AMP, MU3_L1_ANGL}, {MU3_L2_AMP, MU3_L2_ANGL}, {MU3_L3_AMP, MU3_L3_ANGL}},
+         {{MU4_L1_AMP, MU4_L1_ANGL}, {MU4_L2_AMP, MU4_L2_ANGL}, {MU4_L3_AMP, MU4_L3_ANGL}},
+    };
+
+    uint32_t mu_sines[4][4][80] = {};
+    for (int mu = 0; mu < 4; mu++) {
+        for (int phase = 0; phase < 3; phase++) {
+        float phase_n = 0;
+            for (int sample = 0; sample < 80; sample++) {
+                float angle = (sample * 360.0 / 80.0 + amp_angl_lut[mu][phase][1]);
+                float sine_val = sin(angle) * amp_angl_lut[mu][phase][0] * 1000;
+                mu_sines[mu][phase][sample] = htonl((uint32_t)sine_val);
+                phase_n += sine_val;
+            }
+        mu_sines[mu][phase][4] = phase_n;
+        }
+    }
+
     // Open raw socket
     if ((sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
         perror("socket");
@@ -215,9 +235,12 @@ int main() {
     while (1) {
         //if (sendto(sockfd, &sv_frame, sizeof(sv_frame), 0,
         //           (struct sockaddr*)&socket_address, sizeof(socket_address)) < 0) {
-        if (send(sockfd, &sv_frame, sizeof(sv_frame), 0) < 0) {
-            perror("sendto");
-            break;
+        for (int i = 0; i < 4; i++){
+            sv_frame.asdu_head.svID[7] = (char)i;
+            if (send(sockfd, &sv_frame, sizeof(sv_frame), 0) < 0) {
+                perror("sendto");
+                break;
+            }
         }
         next_time.tv_nsec += 250000l;
         next_time.tv_sec += next_time.tv_nsec / 1000000000l;
